@@ -4,6 +4,19 @@ import time
 import pandas as pd
 
 
+def get_swipl_version():
+    prolog = Prolog()
+    query = list(prolog.query("current_prolog_flag(version, Version)"))
+    version_string = str(query[0]['Version'])
+    major = int(version_string[:-4])
+    minor = int(version_string[-4:-2])
+    patch = int(version_string[-2:])
+    print("Using swipl version {}.{}.{}".format(major, minor, patch))
+    return major, minor, patch
+
+swipl_major_version = get_swipl_version()[0]
+
+
 def flatten(container):
     for i in container:
         if isinstance(i, (list,tuple)):
@@ -74,13 +87,19 @@ def find_solution(size=8, num_boxes=2, time_limit=10, seed=0):
     boxes_target_string = "[" + ','.join(boxes_target) + ']'
 
     prolog = Prolog()
-    prolog.consult("sokoban.pl")
+    if swipl_major_version < 8:
+        prolog.consult("sokoban_swipl7.pl")
+    else:
+        prolog.consult("sokoban.pl")
+
     query = "call_with_time_limit({},solve([{},{},{},{},{}],Solution))".format(time_limit,
                                                                                tops_string,
                                                                                rights_string,
                                                                                boxes_initial_string,
                                                                                boxes_target_string,
                                                                                sokoban_string)
+    if swipl_major_version < 8:
+        query = "use_module(library(time))," + query
 
     print(query)
     try:
