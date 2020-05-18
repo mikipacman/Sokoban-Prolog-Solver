@@ -88,6 +88,7 @@ def find_solution(size=8, num_boxes=2, time_limit=10, seed=0):
 
     prolog = Prolog()
     if swipl_major_version < 8:
+        print("Warning: using sokoban_swipl7.pl for compatibility with SWI-Prolog version 7")
         prolog.consult("sokoban_swipl7.pl")
     else:
         prolog.consult("sokoban.pl")
