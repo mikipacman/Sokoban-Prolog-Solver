@@ -2,7 +2,9 @@ from pyswip import Prolog
 from gym_sokoban.envs.sokoban_env_fast import SokobanEnvFast
 import time
 import pandas as pd
-
+from PIL import Image
+import cv2
+import numpy as np
 
 def get_swipl_version():
     prolog = Prolog()
@@ -13,6 +15,7 @@ def get_swipl_version():
     patch = int(version_string[-2:])
     print("Using swipl version {}.{}.{}".format(major, minor, patch))
     return major, minor, patch
+
 
 swipl_major_version = get_swipl_version()[0]
 
@@ -36,7 +39,11 @@ def map_moves(move):
     elif move == "right":
         return 1
 
-def find_solution(size=8, num_boxes=2, time_limit=10, seed=0):
+
+def scale(A, factor):
+    return np.array(np.repeat(np.repeat(A, factor, 1), factor, 0), dtype=np.uint8)
+
+def find_solution(size=8, num_boxes=2, time_limit=10, seed=0, verbose=1):
     dim_room = (size, size)
 
     env = SokobanEnvFast(dim_room=dim_room,
@@ -88,7 +95,8 @@ def find_solution(size=8, num_boxes=2, time_limit=10, seed=0):
 
     prolog = Prolog()
     if swipl_major_version < 8:
-        print("Warning: using sokoban_swipl7.pl for compatibility with SWI-Prolog version 7")
+        if verbose:
+            print("Warning: using sokoban_swipl7.pl for compatibility with SWI-Prolog version 7")
         prolog.consult("sokoban_swipl7.pl")
     else:
         prolog.consult("sokoban.pl")
@@ -101,45 +109,77 @@ def find_solution(size=8, num_boxes=2, time_limit=10, seed=0):
                                                                                sokoban_string)
     if swipl_major_version < 8:
         query = "use_module(library(time))," + query
-
-    print(query)
+    if verbose:
+        print(query)
     try:
         result = list(prolog.query(query))
         rewards = []
         for i, r in enumerate(result):
             solution = r['Solution']
             actions = []
+            frame = []
             for index in range(len(solution)):
                 move = str(solution[index]).split()[-1]
                 move = move[:-1]
                 action = map_moves(move)
                 actions.append(action)
                 observation, reward, done, info = env.step(action)
+                arr = scale(env.render(mode="rgb_array"), 4)
+                frame.append(Image.fromarray(arr))
                 rewards.append(reward)
+
+            render_video(frame, f"{seed}_{i}_size{size}x{size}")
+
+        if verbose:
             print("Last return {}".format(rewards[-1]))
-            if rewards[-1] >= 10:
-                return 1, actions
-            else:
-                return 0, []
+        if rewards[-1] >= 10:
+            return 1, actions
+        else:
+            return 0, []
     except:
         return 0, []
 
 
+def render_video(frames, name):
+    videodims = frames[0].size
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(f"videos/{name}.mp4", fourcc, 10, videodims)
+
+    for f in frames:
+        imtemp = f.copy()
+        video.write(cv2.cvtColor(np.array(imtemp), cv2.COLOR_RGB2BGR))
+    video.release()
+
+
 if __name__ == "__main__":
 
+    # initial_seed = 0    # 64
+    # initial_seed = 100    # 61
+    # initial_seed = 3333    # 52
+    # initial_seed = 123456    # 70
+    initial_seed = 666    # 59
     number_of_trials = 100
     time_start = time.time()
 
     df = pd.DataFrame(columns=['seed', 'actions'])
 
     results = 0
-    for seed in range(number_of_trials):
+    not_my_fault = 0
+    for seed in range(initial_seed, initial_seed + number_of_trials):
         print("Current trial {} result {}".format(seed, results))
-        new_result, actions = find_solution(size=8, num_boxes=2, time_limit=20, seed=seed)
-        results += new_result
-        df = df.append({'seed' : seed , 'actions' : actions} , ignore_index=True)
+        try:
+            new_result, actions = find_solution(size=8, num_boxes=2, time_limit=20, seed=seed, verbose=0)
+        except TypeError:
+            not_my_fault += 1
+            print(f"SEED {seed} produces WRONG board")
+            new_result = 0
+            actions = []
 
+        results += new_result
+        df = df.append({'seed': seed, 'actions': actions}, ignore_index=True)
 
     print("Number of solutions: {}".format(results))
+    print("Number of fails that are not my fault: {}".format(not_my_fault))
     print("Total time: {}".format(time.time() - time_start))
     df.to_csv('results.csv')
