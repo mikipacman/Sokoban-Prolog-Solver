@@ -158,7 +158,8 @@ if __name__ == "__main__":
     # initial_seed = 100    # 61
     # initial_seed = 3333    # 52
     # initial_seed = 123456    # 70
-    initial_seed = 666    # 59
+    # initial_seed = 666    # 59
+    initial_seed = 394669 * 10000    #
     number_of_trials = 100
     time_start = time.time()
 
